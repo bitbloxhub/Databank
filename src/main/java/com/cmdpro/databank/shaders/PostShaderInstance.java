@@ -1,9 +1,7 @@
 package com.cmdpro.databank.shaders;
 
-import com.cmdpro.databank.Databank;
 import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -16,10 +14,6 @@ import org.joml.Matrix4f;
 import java.io.IOException;
 import java.util.List;
 
-import static com.mojang.blaze3d.platform.GlConst.GL_DRAW_FRAMEBUFFER;
-import static com.mojang.blaze3d.platform.GlConst.GL_TEXTURE_2D;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_INTERNAL_FORMAT;
-
 public abstract class PostShaderInstance {
     public abstract ResourceLocation getShaderLocation();
     private PostChain postChain;
@@ -28,6 +22,7 @@ public abstract class PostShaderInstance {
     private boolean active;
     public PoseStack viewModelStack;
     private static RenderTarget depthBackupTarget;
+    private static boolean depthBackupStencilEnabled;
 
     public boolean isActive() {
         return active;
@@ -81,30 +76,36 @@ public abstract class PostShaderInstance {
 
     public void processPostChain() {
         var mainRenderTarget = Minecraft.getInstance().getMainRenderTarget();
-        getDepthBackupTarget().copyDepthFrom(mainRenderTarget);
+        var backupTarget = getDepthBackupTarget();
+        backupTarget.copyDepthFrom(mainRenderTarget);
 
         RenderSystem.disableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableDepthTest();
         RenderSystem.resetTextureMatrix();
         postChain.process(Minecraft.getInstance().getTimer().getGameTimeDeltaTicks());
-        mainRenderTarget.copyDepthFrom(getDepthBackupTarget());
 
-//        GlStateManager._bindTexture(mainRenderTarget.getDepthTextureId());
-//        var mainFormat = GlStateManager._getTexLevelParameter(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT);
-//        GlStateManager._bindTexture(depthBackupTarget.getDepthTextureId());
-//        var backupFormat = GlStateManager._getTexLevelParameter(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT);
-//        Databank.LOGGER.info("Main: {}, Backup: {}", mainFormat, backupFormat);
+        mainRenderTarget.copyDepthFrom(backupTarget);
 
         mainRenderTarget.bindWrite(true);
     }
 
     protected static RenderTarget getDepthBackupTarget() {
+        var mainRenderTarget = Minecraft.getInstance().getMainRenderTarget();
+        if (depthBackupTarget != null
+            && (depthBackupTarget.width != mainRenderTarget.width
+                || depthBackupTarget.height != mainRenderTarget.height
+                || depthBackupStencilEnabled != mainRenderTarget.isStencilEnabled())) {
+            depthBackupTarget.destroyBuffers();
+            depthBackupTarget = null;
+        }
+
         if (depthBackupTarget == null) {
-            var mainRenderTarget = Minecraft.getInstance().getMainRenderTarget();
             depthBackupTarget = new MainTarget(mainRenderTarget.width, mainRenderTarget.height);
-            if (mainRenderTarget.isStencilEnabled())
-                getDepthBackupTarget().enableStencil();
+            if (mainRenderTarget.isStencilEnabled()) {
+                depthBackupTarget.enableStencil();
+            }
+            depthBackupStencilEnabled = mainRenderTarget.isStencilEnabled();
         }
         return depthBackupTarget;
     }

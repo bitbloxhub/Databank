@@ -20,6 +20,7 @@
     "client.BlockModelShaperMixin",
     "client.BufferSourceMixin",
     "client.GameRendererMixin",
+    "client.RenderTargetMixin",
     "client.ItemBlockRenderTypesMixin",
     "client.ItemMixin",
     "client.ItemModelShaperMixin",
